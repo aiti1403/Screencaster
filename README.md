@@ -19,16 +19,10 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/yourusername/screencaster.git
+git clone https://github.com/aiti1403/screencaster.git
 cd screencaster
 ```
-
-2. Установите зависимости:
-```bash
-pip install -r requirements.txt
-```
-
-3. Запустите приложение:
+2. Запустите приложение:
 ```bash
 python main.py
 ```
