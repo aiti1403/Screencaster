@@ -843,15 +843,13 @@ class MetadataCollector:
         self.input_key_codes = []
 
 
-
-
-    
     def _on_mouse_click(self, x, y, button, pressed):
         """Обрабатывает клики мышью"""
         if not self.collecting or self.paused:
             return
-        
-        if self.in_input_field:
+            
+        # Завершаем ввод текста при любом клике мыши (нажатии кнопки)
+        if pressed and self.in_input_field:
             self._finish_input("Click")
             
         # Корректируем координаты
@@ -867,7 +865,7 @@ class MetadataCollector:
             keys = None
             codes = None
             key_codes = None
-        
+            
         if pressed:
             # Обработка нажатия кнопки мыши
             if button == mouse.Button.left:
@@ -889,7 +887,7 @@ class MetadataCollector:
                             "keyCodes": key_codes
                         })
                         return
-                
+                        
                 # Обычный клик левой кнопкой
                 self.events.append({
                     "id": self._generate_id(),
@@ -923,9 +921,10 @@ class MetadataCollector:
             if button == mouse.Button.left and self.is_dragging:
                 # Завершение drag and drop
                 end_pos = (x, y)
+                end_time = timestamp
                 
                 # Проверяем, было ли реальное перетаскивание
-                if (abs(self.drag_start_pos[0] - end_pos[0]) > 5 or 
+                if (abs(self.drag_start_pos[0] - end_pos[0]) > 5 or
                     abs(self.drag_start_pos[1] - end_pos[1]) > 5):
                     
                     # Подготовка информации о нажатых клавишах на момент начала перетаскивания
@@ -937,31 +936,37 @@ class MetadataCollector:
                         keys = None
                         codes = None
                         key_codes = None
-                    
+                        
                     # Создаем событие drag
                     self.events.append({
                         "id": self._generate_id(),
                         "type": "drag",
                         "time": self.drag_start_time,
+                        "startTime": self.drag_start_time,
+                        "endTime": end_time,
                         "x": self.drag_start_pos[0],
                         "y": self.drag_start_pos[1],
                         "start": {
                             "x": self.drag_start_pos[0],
-                            "y": self.drag_start_pos[1]
+                            "y": self.drag_start_pos[1],
+                            "time": self.drag_start_time
                         },
                         "end": {
                             "x": end_pos[0],
-                            "y": end_pos[1]
+                            "y": end_pos[1],
+                            "time": end_time
                         },
-                        "duration": round(timestamp - self.drag_start_time, 3),
+                        "duration": round(end_time - self.drag_start_time, 3),
                         "keys": keys,
                         "codes": codes,
                         "keyCodes": key_codes
                     })
-                
+                    
                 self.is_dragging = False
                 self.drag_start_pos = None
                 self.drag_start_time = None
+
+
 
     def _handle_long_press(self, code):
         """Обрабатывает длительное нажатие клавиши"""
@@ -998,6 +1003,10 @@ class MetadataCollector:
         if not self.collecting or self.paused:
             return
             
+        # Завершаем ввод текста при прокрутке
+        if self.in_input_field:
+            self._finish_input("Scroll")
+            
         # Корректируем координаты
         x, y = self._adjust_coordinates(x, y)
         timestamp = self._get_current_timestamp()
@@ -1025,8 +1034,9 @@ class MetadataCollector:
             self.scroll_start_pos = (x, y)
             self.scroll_start_time = timestamp
             self.scroll_amount = scroll_direction
-        
+            
         self.last_scroll_time = timestamp
+    
     
     def _finish_scroll(self, end_x, end_y):
         """Завершает событие прокрутки после паузы"""
