@@ -1011,13 +1011,18 @@ class MetadataCollector:
         x, y = self._adjust_coordinates(x, y)
         timestamp = self._get_current_timestamp()
         
-        # Определяем направление прокрутки (1 для прокрутки вверх, -1 для прокрутки вниз)
-        scroll_direction = 1 if dy > 0 else -1
+        # Определяем направление прокрутки
+        # В pynput: положительное dy означает прокрутку вверх, отрицательное - вниз
+        # Для единообразия с веб-стандартами: положительное значение = вниз, отрицательное = вверх
+        scroll_direction = -1 if dy > 0 else 1  # Инвертируем для соответствия веб-стандартам
+        scroll_direction_name = "up" if dy > 0 else "down"
         
         # Если уже идет прокрутка, обновляем ее
         if self.is_scrolling:
-            # Если прошло более 0.5 секунд с последней прокрутки, завершаем предыдущую
-            if timestamp - self.last_scroll_time > 0.5:
+            # Если прошло более 0.5 секунд с последней прокрутки или изменилось направление,
+            # завершаем предыдущую прокрутку
+            current_direction = 1 if self.scroll_amount > 0 else -1
+            if timestamp - self.last_scroll_time > 0.5 or current_direction != scroll_direction:
                 self._finish_scroll(x, y)
                 
                 # Начинаем новую прокрутку
@@ -1025,6 +1030,7 @@ class MetadataCollector:
                 self.scroll_start_pos = (x, y)
                 self.scroll_start_time = timestamp
                 self.scroll_amount = scroll_direction
+                self.scroll_direction_name = scroll_direction_name
             else:
                 # Продолжаем текущую прокрутку
                 self.scroll_amount += scroll_direction
@@ -1034,10 +1040,10 @@ class MetadataCollector:
             self.scroll_start_pos = (x, y)
             self.scroll_start_time = timestamp
             self.scroll_amount = scroll_direction
+            self.scroll_direction_name = scroll_direction_name
             
         self.last_scroll_time = timestamp
-    
-    
+
     def _finish_scroll(self, end_x, end_y):
         """Завершает событие прокрутки после паузы"""
         if not self.is_scrolling:
@@ -1055,20 +1061,28 @@ class MetadataCollector:
             codes = None
             key_codes = None
         
+        # Определяем направление прокрутки на основе накопленного значения
+        direction = "down" if self.scroll_amount > 0 else "up"
+        
         # Создаем событие scroll
         self.events.append({
             "id": self._generate_id(),
             "type": "scroll",
             "time": self.scroll_start_time,
+            "startTime": self.scroll_start_time,
+            "endTime": timestamp,
             "start": {
                 "x": self.scroll_start_pos[0],
-                "y": self.scroll_start_pos[1]
+                "y": self.scroll_start_pos[1],
+                "time": self.scroll_start_time
             },
             "end": {
                 "x": end_x,
-                "y": end_y
+                "y": end_y,
+                "time": timestamp
             },
-            "scrollAmount": self.scroll_amount,
+            "scrollAmount": abs(self.scroll_amount),  # Абсолютное значение для количества "щелчков"
+            "direction": direction,  # Явное указание направления
             "duration": round(timestamp - self.scroll_start_time, 3),
             "keys": keys,
             "codes": codes,
@@ -1080,6 +1094,11 @@ class MetadataCollector:
         self.scroll_start_pos = None
         self.scroll_start_time = None
         self.scroll_amount = 0
+        self.scroll_direction_name = None
+    
+        
+        
+    
 
         
     def add_custom_event(self, event_type, data=None):
