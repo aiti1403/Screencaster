@@ -21,6 +21,8 @@ class MetadataCollector:
         self.screen_width = 1920  # Значение по умолчанию
         self.screen_height = 1080  # Значение по умолчанию
 
+        self.fps = 30  # Значение по умолчанию
+
         # Для отслеживания длительных нажатий
         self.long_press_timers = {}  # Словарь таймеров для длительных нажатий
         self.long_press_threshold = 0.5  # Порог в секундах для длительного нажатия
@@ -263,6 +265,9 @@ class MetadataCollector:
             char = chr(64 + i)  # A-Z (ASCII 65-90)
             self.old_to_new_code[f"Key{i}"] = f"Key{char}"
 
+    def set_fps(self, fps):
+        """Устанавливает значение FPS (кадров в секунду)"""
+        self.fps = fps
 
 
     
@@ -426,6 +431,7 @@ class MetadataCollector:
                 "width": self.screen_width,
                 "height": self.screen_height
             },
+            "fps": self.fps,
             "events": self.events
         }
             
@@ -1013,8 +1019,12 @@ class MetadataCollector:
         # Определяем направление прокрутки
         # В pynput: положительное dy означает прокрутку вверх, отрицательное - вниз
         # Для единообразия с веб-стандартами: положительное значение = вниз, отрицательное = вверх
-        scroll_direction = -1 if dy > 0 else 1  # Инвертируем для соответствия веб-стандартам
+        # Определяем направление прокрутки
+# В pynput: положительное dy означает прокрутку вверх, отрицательное - вниз
+# Мы сохраняем это соответствие: положительное значение = вверх, отрицательное = вниз
+        scroll_direction = 1 if dy > 0 else -1  # Положительное = вверх, отрицательное = вниз
         scroll_direction_name = "up" if dy > 0 else "down"
+
         
         # Если уже идет прокрутка, обновляем ее
         if self.is_scrolling:
@@ -1061,7 +1071,8 @@ class MetadataCollector:
             key_codes = None
         
         # Определяем направление прокрутки на основе накопленного значения
-        direction = "down" if self.scroll_amount > 0 else "up"
+        direction = "up" if self.scroll_amount > 0 else "down"
+
         
         # Создаем событие scroll
         self.events.append({
@@ -1080,7 +1091,7 @@ class MetadataCollector:
                 "y": end_y,
                 "time": timestamp
             },
-            "scrollAmount": abs(self.scroll_amount),  # Абсолютное значение для количества "щелчков"
+            "scrollAmount": self.scroll_amount,  # Абсолютное значение для количества "щелчков"
             "direction": direction,  # Явное указание направления
             "duration": round(timestamp - self.scroll_start_time, 3),
             "keys": keys,
