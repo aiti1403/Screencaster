@@ -421,7 +421,6 @@ class MetadataCollector:
         # Создаем структуру метаданных
         metadata = {
             "version": "1.0",
-            "recordingStart": self.recording_start,
             "recordingDuration": round(self._get_current_timestamp(), 3),
             "screen": {
                 "width": self.screen_width,
