@@ -19,7 +19,7 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/aiti1403/screencaster.git
+git clone https://github.com/aiti1403/Screencaster.git
 cd screencaster
 ```
 2. Запустите приложение:
