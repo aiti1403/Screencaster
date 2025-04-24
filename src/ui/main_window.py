@@ -63,22 +63,6 @@ class CircleButton(QPushButton):
             # Подставка
             painter.drawRect(22, 32, 6, 3)
             painter.drawRect(19, 35, 12, 1)
-        
-        # Если это кнопка настроек
-        elif self.objectName() == "settingsButton":
-            # Рисуем иконку шестеренки
-            painter.setPen(QPen(QColor("#666666"), 1.5))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(18, 18, 14, 14)
-            
-            # Рисуем зубцы шестеренки (упрощенно)
-            for i in range(8):
-                angle = i * 45
-                painter.save()
-                painter.translate(25, 25)
-                painter.rotate(angle)
-                painter.drawLine(0, 7, 0, 10)
-                painter.restore()
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -93,7 +77,7 @@ class MainWindow(QMainWindow):
         # Настройка окна
         self.setWindowTitle("Screen Recorder")
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setFixedSize(80, 380)  # Увеличиваем ширину с 70 до 80 пикселей
+        self.setFixedSize(80, 280)  # Уменьшаем высоту, так как убрали кнопку настроек
         
         # Переменные для перетаскивания окна
         self.dragging = False
@@ -157,11 +141,15 @@ class MainWindow(QMainWindow):
         """)
         
         # Добавляем пункты меню для кнопки закрытия
-        minimize_action = QAction("Свернуть", self)
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings)
+        self.close_menu.addAction(settings_action)
+        
+        minimize_action = QAction("Minimize", self)
         minimize_action.triggered.connect(self.showMinimized)
         self.close_menu.addAction(minimize_action)
         
-        close_action = QAction("Закрыть", self)
+        close_action = QAction("Close", self)
         close_action.triggered.connect(self.close)
         self.close_menu.addAction(close_action)
 
@@ -283,22 +271,10 @@ class MainWindow(QMainWindow):
         self.region_button.clicked.connect(self.select_region)
         main_layout.addWidget(self.region_button, alignment=Qt.AlignCenter)
         
-        # Разделительная линия 3
-        line3 = QFrame()
-        line3.setFrameShape(QFrame.HLine)
-        line3.setFrameShadow(QFrame.Plain)
-        line3.setStyleSheet("background-color: #E5E5E5; max-height: 1px;")
-        main_layout.addWidget(line3)
-        
-        # Кнопка настроек
-        self.settings_button = CircleButton()
-        self.settings_button.setObjectName("settingsButton")
-        self.settings_button.clicked.connect(self.open_settings)
-        main_layout.addWidget(self.settings_button, alignment=Qt.AlignCenter)
+        # Удалена кнопка настроек и разделительная линия перед ней
         
         # Добавляем растягивающийся элемент внизу для баланса
         main_layout.addStretch(1)
-
 
     def resizeEvent(self, event):
         """Переопределяем метод resizeEvent для обновления позиции кнопки закрытия при изменении размера окна"""
@@ -306,15 +282,22 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'close_button'):
             self.close_button.move(self.width() - 25, 5)
 
-
     def show_close_menu(self):
-        # Показываем всплывающее меню с опциями "Свернуть" и "Закрыть"
-        pos = self.close_button.mapToGlobal(QPoint(self.close_button.width(), 0))
+        # Показываем всплывающее меню с опциями "Настройки", "Свернуть" и "Закрыть"
+        # Позиционируем меню вплотную к правой стороне основного окна
+        pos = self.mapToGlobal(QPoint(self.width(), 10))  # 10px от верха окна
         self.close_menu.popup(pos)
+
 
     def open_settings(self):
         settings_window = SettingsWindow(self.config)
+        
+        # Position the settings window next to the main window
+        main_pos = self.mapToGlobal(QPoint(0, 0))
+        settings_window.move(main_pos.x() + self.width() + 5, main_pos.y())
+        
         settings_window.exec_()
+
 
     def select_region(self):
         # Показываем всплывающее меню с выбором разрешения
@@ -328,7 +311,7 @@ class MainWindow(QMainWindow):
         self.config.save()
         
         # Показываем уведомление о выбранном разрешении
-        self.show_notification(f"Установлено разрешение: {width} x {height}")
+        self.show_notification(f"Resolution set: {width} x {height}")
 
     def show_notification(self, message):
         # Создаем временную метку с уведомлением как дочерний виджет основного окна
@@ -343,6 +326,7 @@ class MainWindow(QMainWindow):
         notification.setAlignment(Qt.AlignCenter)
         notification.setFixedSize(200, 40)
         
+        # Позиционируем уведомление рядом с окном
         # Позиционируем уведомление рядом с окном
         notification_x = self.width()
         notification_y = self.height() // 2 - notification.height() // 2
@@ -360,7 +344,6 @@ class MainWindow(QMainWindow):
             notification.deleteLater()
         
         QTimer.singleShot(2000, hide_and_delete)
-
 
     def toggle_recording(self):
         if not self.is_recording:
@@ -385,7 +368,6 @@ class MainWindow(QMainWindow):
         self.record_button.update()
         self.pause_button.setEnabled(True)
         self.region_button.setEnabled(False)
-        self.settings_button.setEnabled(False)
         
         # Запускаем таймер
         self.recording_time = 0
@@ -402,7 +384,7 @@ class MainWindow(QMainWindow):
         self.timer.stop()
         
         # Показываем уведомление о паузе
-        self.show_notification("Запись приостановлена")
+        self.show_notification("Recording paused")
 
     def resume_recording(self):
         # Проверяем, есть ли метод resume_recording в recorder
@@ -415,8 +397,7 @@ class MainWindow(QMainWindow):
         self.timer.start(1000)
         
         # Показываем уведомление о возобновлении
-        self.show_notification("Запись возобновлена")
-
+        self.show_notification("Recording resumed")
 
     def stop_recording(self):
         # Вызываем метод stop_recording без попытки распаковки результата
@@ -439,7 +420,6 @@ class MainWindow(QMainWindow):
         self.record_button.update()
         self.pause_button.setEnabled(False)
         self.region_button.setEnabled(True)
-        self.settings_button.setEnabled(True)
         
         # Останавливаем таймер
         self.timer.stop()
@@ -448,11 +428,10 @@ class MainWindow(QMainWindow):
         
         # Показываем уведомление о завершении записи
         if video_file:
-            self.show_notification(f"Запись сохранена: {os.path.basename(video_file)}")
+            self.show_notification(f"Recording saved: {os.path.basename(video_file)}")
         else:
-            self.show_notification("Запись завершена")
+            self.show_notification("Recording completed")
    
-
     def update_timer(self):
         if self.is_recording:
             self.recording_time += 1
@@ -490,5 +469,4 @@ class MainWindow(QMainWindow):
         # Позиционируем кнопку закрытия в правом верхнем углу
         if hasattr(self, 'close_button'):
             self.close_button.move(self.width() - 25, 5)
-
 
