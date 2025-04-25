@@ -41,6 +41,9 @@ class MetadataCollector:
         self.is_dragging = False
         self.drag_start_pos = None
         self.drag_start_time = None
+        self.drag_keys = None
+        self.drag_codes = None
+        self.drag_key_codes = None
         
         # Состояние прокрутки
         self.is_scrolling = False
@@ -251,7 +254,7 @@ class MetadataCollector:
             "shift": "ShiftLeft", "shift_r": "ShiftRight",
             "ctrl": "ControlLeft", "ctrl_r": "ControlRight",
             "ctrl_l": "ControlLeft",  # Добавлено для обратной совместимости
-            "alt": "AltLeft", "alt_r": "AltRight",
+            "alt_l": "AltLeft", "alt_r": "AltRight",
             "alt_gr": "AltGraph",  # Добавлено для Mac
             "cmd": "MetaLeft", "cmd_r": "MetaRight",
             "cmd_l": "MetaLeft",  # Добавлено для обратной совместимости
@@ -609,8 +612,8 @@ class MetadataCollector:
                 "keyCode": key_code   # Числовой код
             })
             
-        # Если это начало ввода текста
-        if not self.in_input_field and code not in {
+        # Список клавиш, которые не должны начинать ввод текста
+        non_input_keys = {
             "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight",
             "AltLeft", "AltRight", "MetaLeft", "MetaRight", "CapsLock",
             "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
@@ -618,15 +621,10 @@ class MetadataCollector:
             "Home", "End", "PageUp", "PageDown",
             "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
             "NumLock"
-        }:
-            self.in_input_field = True
-            self.input_start_time = timestamp
-            self.input_codes = [code]
-            self.input_keys = [key_char]
-            self.input_key_codes = [key_code]
-            
+        }
+        
         # Если уже идет ввод текста, добавляем код клавиши
-        elif self.in_input_field:
+        if self.in_input_field:
             # Проверяем на клавиши, которые завершают ввод
             if code in {"Enter", "Tab", "Escape"}:
                 # Завершаем ввод текста
@@ -637,6 +635,29 @@ class MetadataCollector:
                 self.input_codes.append(code)
                 self.input_keys.append(key_char)
                 self.input_key_codes.append(key_code)
+        # Если это начало ввода текста (только если это не первое нажатие и не служебная клавиша)
+        elif code not in non_input_keys and len(self.events) >= 2:
+            # Проверяем предыдущее событие
+            prev_event = self.events[-2] if len(self.events) > 1 else None
+            
+            # Начинаем ввод текста только если предыдущее событие было нажатием клавиши
+            # и прошло не более 1 секунды
+            if (prev_event and prev_event.get("type") == "keyPress" and 
+                timestamp - prev_event.get("time", 0) < 1.0 and
+                prev_event.get("code") not in non_input_keys):
+                
+                # Удаляем предыдущее событие keyPress, так как оно станет частью ввода
+                prev_key_event = self.events.pop()
+                self.events.pop()  # Удаляем текущее событие keyPress, которое мы только что добавили
+                
+                self.in_input_field = True
+                self.input_start_time = prev_event.get("time")  # Используем время предыдущего события
+                
+                # Добавляем предыдущую клавишу как начало ввода
+                self.input_codes = [prev_event.get("code"), code]
+                self.input_keys = [prev_event.get("key"), key_char]
+                self.input_key_codes = [prev_event.get("keyCode", 0), key_code]
+
     
     
     def _on_key_release(self, key):
@@ -874,42 +895,19 @@ class MetadataCollector:
         if pressed:
             # Обработка нажатия кнопки мыши
             if button == mouse.Button.left:
-                # Проверка на двойной клик
-                if len(self.events) > 0 and self.events[-1].get("type") == "leftClick":
-                    last_click_time = self.events[-1].get("time", 0)
-                    if timestamp - last_click_time < 0.5:  # Если прошло менее 0.5 секунд
-                        # Удаляем предыдущий клик
-                        self.events.pop()
-                        # Добавляем двойной клик
-                        self.events.append({
-                            "id": self._generate_id(),
-                            "type": "doubleClick",
-                            "time": timestamp,
-                            "x": x,
-                            "y": y,
-                            "keys": keys,
-                            "codes": codes,
-                            "keyCodes": key_codes
-                        })
-                        return
-                        
-                # Обычный клик левой кнопкой
-                self.events.append({
-                    "id": self._generate_id(),
-                    "type": "leftClick",
-                    "time": timestamp,
-                    "x": x,
-                    "y": y,
-                    "keys": keys,
-                    "codes": codes,
-                    "keyCodes": key_codes
-                })
-                
-                # Начало drag and drop
+                # Начало потенциального drag and drop
                 self.drag_start_pos = (x, y)
                 self.drag_start_time = timestamp
                 self.is_dragging = True
                 
+                # Сохраняем информацию о нажатых клавишах для потенциального клика
+                self.drag_keys = keys
+                self.drag_codes = codes
+                self.drag_key_codes = key_codes
+                
+                # НЕ создаем событие leftClick сразу - подождем, чтобы определить, 
+                # является ли это кликом или началом перетаскивания
+                    
             elif button == mouse.Button.right:
                 self.events.append({
                     "id": self._generate_id(),
@@ -932,16 +930,6 @@ class MetadataCollector:
                 if (abs(self.drag_start_pos[0] - end_pos[0]) > 5 or
                     abs(self.drag_start_pos[1] - end_pos[1]) > 5):
                     
-                    # Подготовка информации о нажатых клавишах на момент начала перетаскивания
-                    if self.pressed_keys:
-                        keys = [self.key_map.get(code, code) for code in self.pressed_keys]
-                        codes = list(self.pressed_keys)
-                        key_codes = [self.key_code_map.get(code, 0) for code in self.pressed_keys]
-                    else:
-                        keys = None
-                        codes = None
-                        key_codes = None
-                        
                     # Создаем событие drag
                     self.events.append({
                         "id": self._generate_id(),
@@ -962,14 +950,62 @@ class MetadataCollector:
                             "time": end_time
                         },
                         "duration": round(end_time - self.drag_start_time, 3),
-                        "keys": keys,
-                        "codes": codes,
-                        "keyCodes": key_codes
+                        "keys": self.drag_keys,
+                        "codes": self.drag_codes,
+                        "keyCodes": self.drag_key_codes
                     })
+                else:
+                    # Если не было реального перетаскивания, то это был клик
+                    # Проверка на двойной клик
+                    if len(self.events) > 0 and self.events[-1].get("type") == "leftClick":
+                        last_click_time = self.events[-1].get("time", 0)
+                        if timestamp - last_click_time < 0.5:  # Если прошло менее 0.5 секунд
+                            # Удаляем предыдущий клик
+                            self.events.pop()
+                            # Добавляем двойной клик
+                            self.events.append({
+                                "id": self._generate_id(),
+                                "type": "doubleClick",
+                                "time": timestamp,
+                                "x": self.drag_start_pos[0],
+                                "y": self.drag_start_pos[1],
+                                "keys": self.drag_keys,
+                                "codes": self.drag_codes,
+                                "keyCodes": self.drag_key_codes
+                            })
+                        else:
+                            # Обычный клик левой кнопкой
+                            self.events.append({
+                                "id": self._generate_id(),
+                                "type": "leftClick",
+                                "time": self.drag_start_time,  # Используем время начала нажатия
+                                "x": self.drag_start_pos[0],
+                                "y": self.drag_start_pos[1],
+                                "keys": self.drag_keys,
+                                "codes": self.drag_codes,
+                                "keyCodes": self.drag_key_codes
+                            })
+                    else:
+                        # Обычный клик левой кнопкой
+                        self.events.append({
+                            "id": self._generate_id(),
+                            "type": "leftClick",
+                            "time": self.drag_start_time,  # Используем время начала нажатия
+                            "x": self.drag_start_pos[0],
+                            "y": self.drag_start_pos[1],
+                            "keys": self.drag_keys,
+                            "codes": self.drag_codes,
+                            "keyCodes": self.drag_key_codes
+                        })
                     
+                # Сбрасываем состояние перетаскивания
                 self.is_dragging = False
                 self.drag_start_pos = None
                 self.drag_start_time = None
+                self.drag_keys = None
+                self.drag_codes = None
+                self.drag_key_codes = None
+
 
 
 
