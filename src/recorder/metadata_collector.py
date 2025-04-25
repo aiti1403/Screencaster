@@ -268,6 +268,38 @@ class MetadataCollector:
             char = chr(64 + i)  # A-Z (ASCII 65-90)
             self.old_to_new_code[f"Key{i}"] = f"Key{char}"
 
+    def detect_screen_fps(self):
+        """Автоматически определяет частоту обновления экрана (FPS) с использованием PyQt5"""
+        try:
+            from PyQt5.QtWidgets import QApplication
+            from PyQt5.QtGui import QScreen
+            import sys
+            
+            # Создаем экземпляр QApplication, если он еще не существует
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication(sys.argv)
+            
+            # Получаем основной экран
+            screen = QApplication.primaryScreen()
+            
+            # Получаем частоту обновления экрана
+            refresh_rate = screen.refreshRate()
+            
+            # Если удалось получить частоту обновления, устанавливаем ее как FPS
+            if refresh_rate > 0:
+                self.fps = refresh_rate
+                return refresh_rate
+            else:
+                # Если не удалось получить частоту обновления, используем значение по умолчанию
+                return self.fps
+                
+        except Exception as e:
+            print(f"Ошибка при определении FPS экрана: {e}")
+            # В случае ошибки возвращаем текущее значение FPS
+            return self.fps
+
+
     def set_fps(self, fps):
         """Устанавливает значение FPS (кадров в секунду)"""
         self.fps = fps
@@ -278,11 +310,14 @@ class MetadataCollector:
         """Начинает сбор метаданных"""
         if self.collecting:
             return
-            
+        
+
+        self.detect_screen_fps()
         self.collecting = True
         self.paused = False
         self.events = []
         self.metadata_file = metadata_file
+
         
         # Устанавливаем время начала записи
         self.start_time = time.time()
